@@ -1,7 +1,7 @@
 -module(prison).
--export([run_prison_experiment/1, run_prison_experiment/0]).
+-export([run/1, run/0]).
 % Export for warning supression
--export([prisoner/1,add_a_day/1,all_inmates_have_visited_yard/2]).
+-export([prisoner/1,do_nothing/1,yard_logic/3]).
 -export([light/1,check_light/1,toggle_light/1]).
 -define(NUM_PRISONERS, 100).
 
@@ -14,15 +14,15 @@
 %
 % Guard
 %
-run_prison_experiment() ->
+run() ->
 	LightPid = screw_in_lightbulb(),
 	Prisoners = imprison_prisoners(?NUM_PRISONERS),
-	run_prison_experiment(Prisoners, [], 0, LightPid).
-run_prison_experiment(NumPrisoners) ->
+	run(Prisoners, [], 0, LightPid).
+run(NumPrisoners) ->
 	LightPid = screw_in_lightbulb(),
 	Prisoners = imprison_prisoners(NumPrisoners),
-	run_prison_experiment(Prisoners, [], 0, LightPid).
-run_prison_experiment(Prisoners, YardVisitors, DayCount, LightPid) ->
+	run(Prisoners, [], 0, LightPid).
+run(Prisoners, YardVisitors, DayCount, LightPid) ->
 	YardPrisoner = lists:nth(random:uniform(length(Prisoners)), Prisoners),
 	go_to_cell(Prisoners--[YardPrisoner]),
 	io:format("Day ~p\n", [DayCount]),
@@ -37,14 +37,15 @@ run_prison_experiment(Prisoners, YardVisitors, DayCount, LightPid) ->
 					go_die(Prisoners)
 			end;
 		_ ->
-			run_prison_experiment(Prisoners, YardVisitors++[YardPrisoner], DayCount+1, LightPid)
+			run(Prisoners, YardVisitors++[YardPrisoner], DayCount+1, LightPid)
 	end.
 
 %yet_to_visit_yard(Prisoners, YardList) ->
 %	[X || X <- Prisoners, lists:member(X, YardList) =:= false].
 	
-imprison_prisoners(0) -> [];
-imprison_prisoners(NumPrisoners) -> [spawn_prisoner() | imprison_prisoners(NumPrisoners-1)].
+imprison_prisoners(NumPrisoners) -> imprison_prisoners(NumPrisoners, NumPrisoners). 
+imprison_prisoners(0, _) -> [];
+imprison_prisoners(NumPrisoners, TotalPrisoners) -> [spawn_prisoner(TotalPrisoners) | imprison_prisoners(NumPrisoners-1,TotalPrisoners)].
 
 
 go_free(Prisoners) ->
@@ -72,27 +73,18 @@ let_prisoner_rot_in_cell(Pid) ->
 %
 % Prisoner
 %
-spawn_prisoner() ->
-	spawn(?MODULE, prisoner, [{0,true,false,0,false}]).
+spawn_prisoner(NumPrisoners) ->
+	spawn(?MODULE, prisoner, [{0,true,false,0,NumPrisoners}]).
 
 prisoner(State) ->
 	%% Prisoner state: number of days imprisoned
 	%% am i leader, numtimes visited yard, 
 	receive
 		{From, {yardDay, LightPid}} ->
-			UpdatedState = all_inmates_have_visited_yard(LightPid, State),
-			{_,_,_,_,AllVisited} = UpdatedState, 
-			case AllVisited of
-				true ->
-					From ! {self(), {all_inmates_visited}},
-					io:format("~p says we've all been in!\n", [self()]);
-				_ ->
-					From ! {self(), {ok}}
-			end,
-			prisoner(UpdatedState);
+			prisoner(yard_logic(From, LightPid, State));
 		{From, {normalDay}} ->
 			From ! {self(), {ok}},
-			prisoner(add_a_day(State));
+			prisoner(do_nothing(State));
 		{_, {executionDay}} ->
 			io:format("~p. dead\n", [self()]),
 			ok;
@@ -103,42 +95,46 @@ prisoner(State) ->
 			io:format("Error!! Bad message received ~p ~p\n", [self(), X])
 	end.
 
-add_a_day({Days_in_prison,A,B,C,D}) -> {Days_in_prison+1,A,B,C,D}.
+do_nothing({Days_in_prison,A,B,C,D}) -> {Days_in_prison+1,A,B,C,D}.
 
 
-all_inmates_have_visited_yard(LightPid, State) ->
-% 
+yard_logic(Guard, LightPid, State) ->
 % The prisoner is the leader if he goes into the exercise yard on the first(0th) day
 % Light's initial position is unknown
 % Leader will leave it in the off position always
 % If the light is on, the leader turns it off and increments the count by one 
-	{Days_in_prison, Havent_sent_signal, Leader, NumVisited, _} = State,
-	% All prisoners do this once
-	Havent_sent_signal_return = case Havent_sent_signal and (check_light(LightPid) =:= off) of
-		true ->
-			toggle_light(LightPid),
-			false;
-		false ->
-			true
+	{Days_in_prison,Havent_sent_signal,Leader,NumVisited,NumPrisoners} = State,
+	case {Havent_sent_signal, (check_light(LightPid)=:=off)} of
+		{true, true} -> 
+			Havent_sent_signalReturn=false,
+			toggle_light(LightPid);
+		{true,false} ->
+			Havent_sent_signalReturn=true;
+		{false,_} ->
+			Havent_sent_signalReturn=false
 	end,
-	case Leader orelse Days_in_prison =:=0 of
-		true -> 
+	case LeaderReturn=Leader orelse Days_in_prison=:=0 of
+		true ->
 			io:format("I am the leader! Pid: ~p\n", [self()]),
-			LeaderReturn=true,
 			case check_light(LightPid) of
 				on ->
-					toggle_light(LightPid),
 					io:format("Light is on. Turn it off and +1: ~p\n", [self()]),
-					NumVisitedReturn = NumVisited+1;
+					toggle_light(LightPid),
+					case (NumVisitedReturn=NumVisited+1)=:=NumPrisoners of
+						true ->
+							io:format("we've all been in!\n", []),
+							Guard ! {self(), {all_inmates_visited}};
+						false -> 
+							io:format("~p out of ~p have been in\n", [NumVisited+1,NumPrisoners])
+					end;
 				off ->
 					io:format("Light is off\n", []),
 					NumVisitedReturn = NumVisited
 			end;
-		_ ->
-			LeaderReturn=false,
-			NumVisitedReturn = 0
+		false -> NumVisitedReturn = 0
 	end,
-	{Days_in_prison+1, Havent_sent_signal_return, LeaderReturn, NumVisitedReturn, NumVisitedReturn+1=:=?NUM_PRISONERS}.
+	Guard ! {self(), {ok}},
+	{Days_in_prison+1, Havent_sent_signalReturn, LeaderReturn, NumVisitedReturn, NumPrisoners}.
 
 %       %
 % LIGHT %
@@ -176,5 +172,5 @@ toggle_light(Pid) ->
 	Pid ! {self(), {toggle}},
 	receive
 		{_, ok} -> 
-			io:format("light toggled~n")
+			io:format("light toggled. Now ~p~n", [check_light(Pid)])
 	end.
