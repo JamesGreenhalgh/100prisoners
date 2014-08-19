@@ -28,7 +28,7 @@ run(Prisoners, YardVisitors, DayCount, LightPid) ->
 	io:format("Day ~p\n", [DayCount]),
 	case go_to_yard(YardPrisoner, LightPid) of
 		all_visited ->
-			case Prisoners -- (YardVisitors++[YardPrisoner]) of
+			case Prisoners--(YardVisitors++[YardPrisoner]) of
 				[] ->
 					io:format("Prisoner was right. Let 'em go\n"),
 					go_free(Prisoners);
@@ -36,7 +36,7 @@ run(Prisoners, YardVisitors, DayCount, LightPid) ->
 					io:format("WRONG. Execution day\n"),
 					go_die(Prisoners)
 			end;
-		_ ->
+		ok ->
 			run(Prisoners, YardVisitors++[YardPrisoner], DayCount+1, LightPid)
 	end.
 
@@ -56,9 +56,9 @@ go_die(Prisoners) ->
 go_to_yard(Pid, LightPid) -> 
 	Pid ! {self(), {yardDay, LightPid}},
 	receive
-		{_, {all_inmates_visited}} ->
+		{Pid, {all_inmates_visited}} ->
 			all_visited;
-		_ -> ok
+		{Pid, {ok}} -> ok
 	end.
 
 go_to_cell(Prisoners) -> 
@@ -67,7 +67,7 @@ go_to_cell(Prisoners) ->
 let_prisoner_rot_in_cell(Pid) ->
 	Pid ! {self(), {normalDay}},
 	receive
-		_ -> ok
+		{Pid, {ok}} -> ok
 	end.
 
 %
@@ -96,7 +96,6 @@ prisoner(State) ->
 	end.
 
 do_nothing({Days_in_prison,A,B,C,D}) -> {Days_in_prison+1,A,B,C,D}.
-
 
 yard_logic(Guard, LightPid, State) ->
 % The prisoner is the leader if he goes into the exercise yard on the first(0th) day
