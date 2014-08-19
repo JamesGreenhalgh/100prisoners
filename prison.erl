@@ -97,6 +97,60 @@ prisoner(State) ->
 
 do_nothing({Days_in_prison,A,B,C,D}) -> {Days_in_prison+1,A,B,C,D}.
 
+yard_logic2(Guard, LightPid, State) ->
+% The prisoner is the leader if he goes into the exercise yard on the second day
+% Light's initial position is unknown but will be set to on by first prisoner in yard
+% Leader will leave it in the off position always
+% If the light is on, the leader turns it off and increments the count by one 
+	{Days_in_prison,Havent_sent_signal,Leader,NumVisited,NumPrisoners} = State,
+	case Days_in_prison=:=0 of
+		true ->
+			case check_light(LightPid) of
+				on -> ok;
+				off -> toggle_light(LightPid)
+			end,
+			Havent_sent_signalReturn=false;
+		false -> ok
+	end,
+			
+	case {Havent_sent_signal, (check_light(LightPid)=:=off)} of
+		{true, true} -> 
+			Havent_sent_signalReturn=false,
+			toggle_light(LightPid);
+		{true,false} ->
+			Havent_sent_signalReturn=Havent_sent_signal;
+		{false,_} ->
+			Havent_sent_signalReturn=Havent_sent_signal
+	end,
+	case Leader orelse Days_in_prison=:=1 of
+		true ->
+			LeaderReturn=true,
+			io:format("I am the leader! Pid: ~p\n", [self()]),
+			case check_light(LightPid) of
+				on ->
+					io:format("Light is on. Turn it off and +1: ~p\n", [self()]),
+					toggle_light(LightPid),
+					case Days_in_prison=:=1 of
+						true -> NumVisitedReturn=2;
+						false -> NumVisitedReturn=NumVisited+1
+					end,
+					case NumVisitedReturn=:=NumPrisoners of
+						true ->
+							io:format("we've all been in!\n", []),
+							Guard ! {self(), {all_inmates_visited}};
+						false -> 
+							io:format("~p out of ~p have been in\n", [NumVisitedReturn,NumPrisoners])
+					end;
+				off ->
+					io:format("Light is off\n", []),
+					NumVisitedReturn = NumVisited
+			end;
+		false -> NumVisitedReturn = 0
+	end,
+	Guard ! {self(), {ok}},
+	{Days_in_prison+1, Havent_sent_signalReturn, LeaderReturn, NumVisitedReturn, NumPrisoners}.
+
+
 yard_logic(Guard, LightPid, State) ->
 % The prisoner is the leader if he goes into the exercise yard on the first(0th) day
 % Light's initial position is unknown
