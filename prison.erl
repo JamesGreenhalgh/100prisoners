@@ -1,7 +1,7 @@
 -module(prison).
 -export([run/1, run/0]).
 % Export for warning supression
--export([prisoner/1,do_nothing/1,yard_logic/3]).
+-export([prisoner/1,do_nothing/1,yard_logic/3, yard_logic2/3]).
 -export([light/1,check_light/1,toggle_light/1]).
 -define(NUM_PRISONERS, 100).
 
@@ -81,7 +81,7 @@ prisoner(State) ->
 	%% am i leader, numtimes visited yard, 
 	receive
 		{From, {yardDay, LightPid}} ->
-			prisoner(yard_logic(From, LightPid, State));
+			prisoner(yard_logic2(From, LightPid, State));
 		{From, {normalDay}} ->
 			From ! {self(), {ok}},
 			prisoner(do_nothing(State));
@@ -103,28 +103,19 @@ yard_logic2(Guard, LightPid, State) ->
 % Leader will leave it in the off position always
 % If the light is on, the leader turns it off and increments the count by one 
 	{Days_in_prison,Havent_sent_signal,Leader,NumVisited,NumPrisoners} = State,
-	case Days_in_prison=:=0 of
+	Havent_sent_signalReturn = case Havent_sent_signal of
 		true ->
 			case check_light(LightPid) of
-				on -> ok;
-				off -> toggle_light(LightPid)
-			end,
-			Havent_sent_signalReturn=false;
-		false -> ok
+				on when Days_in_prison=:=0 -> false;
+				on -> true;
+				off ->
+					toggle_light(LightPid),
+					false
+			end;
+		false -> false
 	end,
-			
-	case {Havent_sent_signal, (check_light(LightPid)=:=off)} of
-		{true, true} -> 
-			Havent_sent_signalReturn=false,
-			toggle_light(LightPid);
-		{true,false} ->
-			Havent_sent_signalReturn=Havent_sent_signal;
-		{false,_} ->
-			Havent_sent_signalReturn=Havent_sent_signal
-	end,
-	case Leader orelse Days_in_prison=:=1 of
+	case LeaderReturn = (Leader orelse Days_in_prison=:=1) of
 		true ->
-			LeaderReturn=true,
 			io:format("I am the leader! Pid: ~p\n", [self()]),
 			case check_light(LightPid) of
 				on ->
