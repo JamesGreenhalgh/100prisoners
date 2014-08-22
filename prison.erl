@@ -25,7 +25,7 @@ run(NumPrisoners) ->
 run(Prisoners, YardVisitors, DayCount, LightPid) ->
 	YardPrisoner = lists:nth(random:uniform(length(Prisoners)), Prisoners),
 	go_to_cell(Prisoners--[YardPrisoner]),
-	io:format("Day ~p\n", [DayCount]),
+	%io:format("Day ~p\n", [DayCount]),
 	case go_to_yard(YardPrisoner, LightPid) of
 		all_visited ->
 			case Prisoners--(YardVisitors++[YardPrisoner]) of
@@ -82,6 +82,7 @@ prisoner(State) ->
 	receive
 		{From, {yardDay, LightPid}} ->
 			prisoner(yard_logic2(From, LightPid, State));
+			%prisoner(yard_logic2(From, LightPid, State));
 		{From, {normalDay}} ->
 			From ! {self(), {ok}},
 			prisoner(do_nothing(State));
@@ -96,6 +97,9 @@ prisoner(State) ->
 	end.
 
 do_nothing({Days_in_prison,A,B,C,D}) -> {Days_in_prison+1,A,B,C,D}.
+
+years(Number_of_days) ->
+	Number_of_days / 365.
 
 yard_logic2(Guard, LightPid, State) ->
 % The prisoner is the leader if he goes into the exercise yard on the second day
@@ -119,7 +123,7 @@ yard_logic2(Guard, LightPid, State) ->
 			io:format("I am the leader! Pid: ~p\n", [self()]),
 			case check_light(LightPid) of
 				on ->
-					io:format("Light is on. Turn it off and +1: ~p\n", [self()]),
+					io:format("~p years elapsed. Light is on. Turn it off and +1: ~p\n", [years(Days_in_prison), self()]),
 					toggle_light(LightPid),
 					case Days_in_prison=:=1 of
 						true -> NumVisitedReturn=2;
@@ -156,9 +160,9 @@ yard_logic(Guard, LightPid, State) ->
 		true ->
 			leader_logic(Guard,LightPid,State);
 		false ->
-			normal_prisoner_logic(Guard, LightPid, State),
-	end,
-	{Days_in_prison+1, Havent_sent_signalReturn, LeaderReturn, NumVisitedReturn, NumPrisoners}.
+			normal_prisoner_logic(Guard, LightPid, State)
+	end.
+%	{Days_in_prison+1, A, Leader, NumVisitedReturn, NumPrisoners}.
 
 normal_prisoner_logic(Guard, LightPid, State) ->
 	{A,Havent_sent_signal,B,C,D} = State,
@@ -173,20 +177,18 @@ normal_prisoner_logic(Guard, LightPid, State) ->
 			end;
 		on ->
 			Havent_sent_signal
-	end
+	end,
 	Guard ! {self(), {ok}},
 	{A,Havent_sent_signalReturn,B,C,D}.
 
 
-
-
 leader_logic(Guard,LightPid,State) ->
-	{Days_in_prison,_,_,NumVisited,NumPrisoners}=State.
+	{Days_in_prison,_,_,NumVisited,NumPrisoners}=State,
 	io:format("I am the leader! Pid: ~p\n", [self()]),
 	case check_light(LightPid) of
 		on ->
-			io:format("Light is on. Turn it off and +1: ~p\n", [self()]),
-			toggle_light(LightPid),
+		io:format("Day ~p, Light is on. Turn it off and +1: ~p\n", [Days_in_prison, self()]),
+		toggle_light(LightPid),
 			case (NumVisitedReturn=NumVisited+1)=:=NumPrisoners of
 				true ->
 					io:format("we've all been in!\n", []),
@@ -197,9 +199,10 @@ leader_logic(Guard,LightPid,State) ->
 		off ->
 			io:format("Light is off\n", []),
 			NumVisitedReturn = NumVisited
-	end;
+	end,
+	Guard ! {self(), {ok}},
 	{Days_in_prison+1, false, true, NumVisitedReturn, NumPrisoners}.
-	
+
 %       %
 % LIGHT %
 %       %
