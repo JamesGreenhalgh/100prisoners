@@ -14,16 +14,31 @@
 %
 % Guard
 %
+% Want to know: Number of days taken
+% Was the prisoner correct
+% Which day was the first day they'd all been in
+% List of prisoners in the yard (order)
+% 
 run() ->
 	LightPid = screw_in_lightbulb(),
 	Prisoners = imprison_prisoners(?NUM_PRISONERS),
-	run(Prisoners, [], 0, LightPid).
+	run(Prisoners, [], 0, LightPid, undefined).
 run(NumPrisoners) ->
 	LightPid = screw_in_lightbulb(),
 	Prisoners = imprison_prisoners(NumPrisoners),
-	run(Prisoners, [], 0, LightPid).
-run(Prisoners, YardVisitors, DayCount, LightPid) ->
+	run(Prisoners, [], 0, LightPid, undefined).
+run(Prisoners, YardVisitors, DayCount, LightPid, FirstDayAllIn) ->
+	% select prisoner
 	YardPrisoner = lists:nth(random:uniform(length(Prisoners)), Prisoners),
+	% have they all been in yet?
+	FirstDayAllInReturn = case FirstDayAllIn of
+		undefined ->
+			case Prisoners--(YardVisitors++[YardPrisoner]) of
+				[] -> DayCount+1;
+				_ -> undefined
+			end;
+		_ -> FirstDayAllIn
+	end,			
 	go_to_cell(Prisoners--[YardPrisoner]),
 	%io:format("Day ~p\n", [DayCount]),
 	case go_to_yard(YardPrisoner, LightPid) of
@@ -35,9 +50,10 @@ run(Prisoners, YardVisitors, DayCount, LightPid) ->
 				_ ->
 					io:format("WRONG. Execution day\n"),
 					go_die(Prisoners)
-			end;
+			end,
+			[length(Prisoners), DayCount+1, YardVisitors++[YardPrisoner], FirstDayAllInReturn];
 		ok ->
-			run(Prisoners, YardVisitors++[YardPrisoner], DayCount+1, LightPid)
+			run(Prisoners, YardVisitors++[YardPrisoner], DayCount+1, LightPid, FirstDayAllInReturn)
 	end.
 
 %yet_to_visit_yard(Prisoners, YardList) ->
