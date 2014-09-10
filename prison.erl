@@ -99,7 +99,7 @@ prisoner(State) ->
 	%% am i leader, numtimes visited yard, 
 	receive
 		{From, {yardDay, LightPid}} ->
-			prisoner(yard_logic2(From, LightPid, State));
+			prisoner(modulo_day_logic(From, LightPid, State));
 			%prisoner(yard_logic2(From, LightPid, State));
 		{From, {normalDay}} ->
 			From ! {self(), {ok}},
